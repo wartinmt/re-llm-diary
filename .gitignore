@@ -3,3 +3,6 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# 章节运行时本地数据
+**/data/
