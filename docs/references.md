@@ -9,3 +9,7 @@
 ## 后续补充
 
 每章引用到的资料会逐步添加，并优先使用官方文档和原始论文。
+
+## 第 04 章
+
+- 智谱 OpenAI API 兼容文档：https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
