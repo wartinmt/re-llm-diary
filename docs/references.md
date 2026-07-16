@@ -13,3 +13,9 @@
 ## 第 04 章
 
 - 智谱 OpenAI API 兼容文档：https://docs.bigmodel.cn/cn/guide/develop/openai/introduction
+
+## 第 05 章
+
+- DeepSeek Chat Completions API 文档
+- 智谱 OpenAI API 兼容文档
+- GitHub Actions 官方 Python 工作流文档
