@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, replace
-from typing import Mapping
+from typing import Collection, Mapping
 
 from costs import TokenUsage, calculate_cost, estimate_usage, format_cny
 from metrics import RoutingSnapshot
@@ -186,8 +186,8 @@ def route_prompt(
 ) -> RouteDecision:
     if not configs:
         raise RuntimeError("没有可供路由的模型。")
-    if budget_cny <= 0:
-        raise ValueError("单轮预算必须大于 0。")
+    if not math.isfinite(budget_cny) or budget_cny <= 0:
+        raise ValueError("单轮预算必须是有限且大于 0 的数字。")
     features = classify_task(prompt)
     weights = _weights(policy, features.task_type, features.complexity)
 
@@ -199,8 +199,8 @@ def route_prompt(
             features.task_type,
             features.complexity,
             max_tokens,
-            observed.cache_hit_ratio,
-            observed.average_output_tokens,
+            observed.cache_hit_ratio_for_role("primary"),
+            observed.average_output_tokens_for_role("primary"),
         )
         estimates[key] = (usage, calculate_cost(config.price, usage).total)
     min_cost = min(cost for _, cost in estimates.values())
@@ -259,14 +259,21 @@ def plan_verification(
     remaining_budget_cny: float,
     verifier_messages: list[dict[str, str]],
     verifier_max_tokens: int,
+    excluded_providers: Collection[str] = (),
 ) -> VerificationPlan:
     if verify_mode not in VERIFY_MODES:
         raise ValueError(f"未知验证模式：{verify_mode}")
-    alternatives = [key for key in configs if key != primary_provider]
+    if not math.isfinite(remaining_budget_cny) or remaining_budget_cny < 0:
+        raise ValueError("剩余预算必须是有限的非负数。")
+    excluded = set(excluded_providers)
+    alternatives = [
+        key for key in configs if key != primary_provider and key not in excluded
+    ]
     if verify_mode == "off":
         return VerificationPlan(False, None, 0.0, "验证已关闭")
     if not alternatives:
-        return VerificationPlan(False, None, 0.0, "没有第二个已配置模型")
+        reason = "没有可用的第二模型" if excluded else "没有第二个已配置模型"
+        return VerificationPlan(False, None, 0.0, reason)
 
     candidates: list[tuple[float, float, str]] = []
     for key in alternatives:
@@ -277,8 +284,8 @@ def plan_verification(
             "analysis",
             max(.55, decision.features.complexity),
             verifier_max_tokens,
-            observed.cache_hit_ratio,
-            observed.average_output_tokens,
+            observed.cache_hit_ratio_for_role("verification"),
+            observed.average_output_tokens_for_role("verification"),
         )
         estimated = calculate_cost(config.price, usage).total
         trust_score = (

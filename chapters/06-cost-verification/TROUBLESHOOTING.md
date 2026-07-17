@@ -1,20 +1,40 @@
 # 常见报错与定位
 
+## 启动时出现 `SyntaxError`，并指向 `str | None`
+
+本章要求 Python 3.10 或更高版本。先运行 `python3 --version`；Windows 使用 `py --version`。如果版本低于 3.10，请安装较新的 Python 后重新创建 `.venv`。
+
 ## `No module named openai` 或 `No module named dotenv`
 
-当前终端没有激活本章 `.venv`，或依赖尚未安装。进入 `06-cost-verification` 后重新激活，再运行 `python3 -m pip install -r requirements.txt`。
+当前终端没有激活本章 `.venv`，或依赖尚未安装。进入 `06-cost-verification` 后重新激活，再运行：
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Windows PowerShell 把 `python3` 替换为 `py`。
+
+## PowerShell 提示找不到 `cp`
+
+`cp` 是 macOS / Linux 命令。Windows PowerShell 使用：
+
+```powershell
+Copy-Item .env.example .env
+```
 
 ## `没有找到可用的模型配置`
 
-确认 `.env` 与 `main.py` 位于同一目录，且至少一把 Key 已替换占位文字。先运行 `python3 main.py --check-config`，它不会显示 Key 或发送请求。
+确认 `.env` 与 `main.py` 位于同一目录，且至少一把 Key 已替换占位文字。`--check-config` 不会显示 Key 或发送请求，但它必须在填入 Key 后运行。
 
 ## `ROUTER_POLICY` / `VERIFY_MODE` 无效
 
 策略只接受 `balanced`、`economy`、`trust`；验证模式只接受 `auto`、`on`、`off`。不要使用中文值或额外引号。
 
-## `TURN_BUDGET_CNY 必须大于 0`
+## `TURN_BUDGET_CNY` 无效
 
-预算单位是人民币，不是 Token 数。可以先用默认 `0.05` 跑通。预算过小只会阻止验证或降低昂贵候选得分，不会撤销已经发出的主请求。
+预算单位是人民币，不是 Token 数。它必须是有限且大于 0 的普通数字，例如 `0.05`。`nan`、`inf`、负数和 0 都会被拒绝。
+
+预算过小只会阻止验证或降低昂贵候选得分，不会撤销已经发出的主请求。
 
 ## 预计成本与平台账单不同
 
@@ -31,6 +51,10 @@
 
 离线预览不会产生实际成本。只有成功收到带 `usage` 的 API 响应才会增加 Token 和费用。若真实回答成功但仍为 0，保留完整响应结构并检查该兼容端点是否返回 `usage`。
 
+## 出现“模型回答成功，但路由账本未能保存”
+
+回答本身已经成功，程序不会因此自动换模型重试，也不会再产生一次同题调用。请检查磁盘空间、目录权限和 `data/router_state.json` 所在目录。修复后重新启动；本轮可能没有完整写入本地累计账本，平台账单仍是最终依据。
+
 ## 缓存命中率总是 0
 
 有些兼容端点不提供缓存细分，或当前请求没有命中缓存。程序会把无法分类的输入按未命中计算，以避免低估成本。
@@ -42,19 +66,20 @@
 - 是否配置了至少两个模型；
 - 主回答后是否还有足够单轮预算；
 - 第二模型是否与主模型不同；
+- 候选验证模型是否刚刚请求失败；
 - `/route 同一个问题` 显示的预计验证成本。
 
 ## 验证返回 `UNCERTAIN`
 
-这不是程序崩溃。验证器可能缺少外部事实、无法解析候选答案，或没有按协议返回首行状态。最终答案会保留，并附加验证提示。
+这不是程序崩溃。验证器可能缺少外部事实、无法解析候选答案、没有按协议返回首行状态，或 API 用 `length` 等结束原因表明输出可能被截断。最终答案会保留，并附加验证提示。
 
 ## 验证返回 `REVISE`，但答案没有替换
 
-验证响应必须包含 `---REVISED---`，后面跟完整替换答案。只有评论而没有完整答案时，程序会降级为 `UNCERTAIN`，避免拿半段修改覆盖原答案。
+验证响应必须包含 `---REVISED---`，后面跟完整替换答案，而且 API 响应必须正常结束。只有评论、没有完整答案，或输出疑似被截断时，程序都会降级为 `UNCERTAIN`，避免拿半段修改覆盖原答案。
 
-## `router_state.json` 版本不受支持
+## `router_state.json` 无法读取或版本不受支持
 
-第 06 章的记录格式加入了 Token 与成本字段。不要把其他章节的 `router_state.json` 直接复制进来。先改名备份，再让本章在自己的 `data` 目录创建新文件。
+第 06 章的记录格式加入了 Token 与成本字段。不要把其他章节的 `router_state.json` 直接复制进来。损坏字段会被转换为清晰的 `MetricsFormatError`，原文件不会被覆盖。先改名备份，再让本章在自己的 `data` 目录创建新文件。
 
 ## 401 / 402 / 404 / 429
 

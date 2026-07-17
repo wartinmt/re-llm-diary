@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 import tempfile
@@ -31,7 +32,12 @@ from router import (
     plan_verification,
     route_prompt,
 )
-from verifier import apply_verification, build_verifier_messages, parse_verification
+from verifier import (
+    VerificationOutcome,
+    apply_verification,
+    build_verifier_messages,
+    parse_verification,
+)
 
 SYSTEM_PROMPT: Final = "你是一个简洁、可靠的中文助手。遇到不确定事实时明确说明。"
 
@@ -58,6 +64,7 @@ class CompletedCall:
     result: ModelResult
     cost: CostBreakdown
     elapsed_seconds: float
+    accounting_warning: str | None = None
 
 
 @dataclass
@@ -95,8 +102,8 @@ def _read_positive_float(name: str, default: float) -> float:
         value = float(raw)
     except ValueError as exc:
         raise RuntimeError(f"{name} 不是有效数字：{raw}") from exc
-    if value <= 0:
-        raise RuntimeError(f"{name} 必须大于 0。")
+    if not math.isfinite(value) or value <= 0:
+        raise RuntimeError(f"{name} 必须是有限且大于 0 的数字。")
     return value
 
 
@@ -164,16 +171,48 @@ def _call_and_record(
     try:
         result = request_fn(clients[provider_key], config, messages, max_tokens)
     except Exception:
-        metrics.record_attempt(
-            provider_key, task_type, role, False, time.perf_counter() - started
-        )
+        try:
+            metrics.record_attempt(
+                provider_key, task_type, role, False, time.perf_counter() - started
+            )
+        except OSError as accounting_exc:
+            print(
+                f"警告：请求失败，同时路由账本也未能保存：{accounting_exc}",
+                file=sys.stderr,
+            )
         raise
     elapsed = time.perf_counter() - started
     cost = calculate_cost(config.price, result.usage)
-    metrics.record_attempt(
-        provider_key, task_type, role, True, elapsed, result.usage, cost.total
+    accounting_warning: str | None = None
+    try:
+        metrics.record_attempt(
+            provider_key, task_type, role, True, elapsed, result.usage, cost.total
+        )
+    except OSError as exc:
+        accounting_warning = (
+            f"模型回答成功，但路由账本未能保存：{exc}。"
+            "本轮不会因此重试或再次调用模型。"
+        )
+    return CompletedCall(
+        provider_key, task_type, result, cost, elapsed, accounting_warning
     )
-    return CompletedCall(provider_key, task_type, result, cost, elapsed)
+
+
+def _show_accounting_warning(call: CompletedCall) -> None:
+    if call.accounting_warning:
+        print(f"警告：{call.accounting_warning}", file=sys.stderr)
+
+
+
+
+def _answer_provider_after_verification(
+    primary_provider: str,
+    verifier_provider: str,
+    outcome: VerificationOutcome,
+) -> str:
+    if outcome.status == "revise" and outcome.revised_answer:
+        return verifier_provider
+    return primary_provider
 
 
 def print_help() -> None:
@@ -318,7 +357,11 @@ def _rate(metrics: RoutingMetricsStore, last: LastRatedAnswer | None, rating: in
     if last.rated:
         print("最近一次回答已经评分，不能重复计入。")
         return
-    metrics.record_rating(last.provider_key, last.task_type, rating)
+    try:
+        metrics.record_rating(last.provider_key, last.task_type, rating)
+    except OSError as exc:
+        print(f"评分没有保存：{exc}", file=sys.stderr)
+        return
     last.rated = True
     print(f"已记录 {rating}/5 分。")
 
@@ -384,8 +427,8 @@ def run_chat() -> None:
                 value = float(raw)
             except ValueError:
                 print("预算必须是人民币数字，例如 /budget 0.05。"); continue
-            if value <= 0:
-                print("预算必须大于 0。"); continue
+            if not math.isfinite(value) or value <= 0:
+                print("预算必须是有限且大于 0 的数字。"); continue
             budget_cny = value; print(f"单轮预算已改为 {format_cny(value)}。"); continue
         if lower == "/mode":
             print(f"模式 {mode}；手动模型 {active_provider}；策略 {policy}；验证 {verify_mode}；预算 {format_cny(budget_cny)}。"); continue
@@ -475,25 +518,35 @@ def run_chat() -> None:
             candidates = candidates[:1]
 
         primary: CompletedCall | None = None
+        failed_provider_keys: set[str] = set()
         for key in candidates:
             try:
-                primary = _call_and_record(key, "primary", decision.features.task_type, api_messages, settings.max_tokens, configs, clients, metrics)
+                primary = _call_and_record(
+                    key, "primary", decision.features.task_type, api_messages,
+                    settings.max_tokens, configs, clients, metrics,
+                )
             except Exception as exc:
+                failed_provider_keys.add(key)
                 print(f"{configs[key].display_name} 请求失败：{exc}", file=sys.stderr)
                 continue
+            _show_accounting_warning(primary)
             break
         if primary is None:
             print("所有候选都失败；本轮没有写入正式记忆。", file=sys.stderr)
             continue
 
         final_answer = primary.result.answer
+        final_answer_provider = primary.provider_key
         actual_total = primary.cost.total
         print(f"主回答：{primary.provider_key}，{primary.elapsed_seconds:.2f}s，实际 {format_cny(primary.cost.total)}。")
 
         verifier_messages = build_verifier_messages(prompt, final_answer)
         plan = plan_verification(
-            decision, primary.provider_key, configs, metrics.snapshot(), verify_mode,
-            max(0.0, budget_cny - actual_total), verifier_messages, settings.verifier_max_tokens,
+            decision.with_selected(primary.provider_key), primary.provider_key,
+            configs, metrics.snapshot(), verify_mode,
+            max(0.0, budget_cny - actual_total), verifier_messages,
+            settings.verifier_max_tokens,
+            excluded_providers=failed_provider_keys,
         )
         if plan.enabled and plan.provider_key:
             print(f"启动验证：{plan.provider_key}；{plan.reason}。")
@@ -506,9 +559,15 @@ def run_chat() -> None:
             except Exception as exc:
                 print(f"验证请求失败：{exc}。保留主回答。", file=sys.stderr)
             else:
+                _show_accounting_warning(verification)
                 actual_total += verification.cost.total
-                outcome = parse_verification(verification.result.answer)
+                outcome = parse_verification(
+                    verification.result.answer, verification.result.finish_reason
+                )
                 final_answer = apply_verification(final_answer, outcome)
+                final_answer_provider = _answer_provider_after_verification(
+                    final_answer_provider, verification.provider_key, outcome
+                )
                 print(
                     f"验证结果：{outcome.status.upper()}，{format_cny(verification.cost.total)}；"
                     f"{outcome.note}"
@@ -521,9 +580,11 @@ def run_chat() -> None:
             memory.save(candidate_memory)
         except OSError as exc:
             print(f"保存失败：{exc}。本轮不会进入当前记忆。", file=sys.stderr)
+            print(f"\n助手（未保存）：{final_answer}")
+            print(f"本轮本地计入成本：{format_cny(actual_total)} / 预算 {format_cny(budget_cny)}。")
             continue
         messages = candidate_memory
-        last_answer = LastRatedAnswer(primary.provider_key, decision.features.task_type)
+        last_answer = LastRatedAnswer(final_answer_provider, decision.features.task_type)
         print(f"\n助手：{final_answer}")
         print(f"本轮本地计入成本：{format_cny(actual_total)} / 预算 {format_cny(budget_cny)}。")
 
