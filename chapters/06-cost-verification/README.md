@@ -6,6 +6,13 @@
 
 它不是自动裁判系统。验证器只给出 `PASS`、`REVISE` 或 `UNCERTAIN`，而且只有在策略、复杂度、候选分差与剩余预算允许时才会参与。两个模型仍可能犯相似的错，因此验证结果必须被理解为额外证据，而不是事实证明。
 
+## 运行要求
+
+- Python 3.10 或更高版本；
+- macOS、Linux 或 Windows PowerShell；
+- 至少一把可用的 DeepSeek 或智谱 API Key；
+- 第二模型验证需要同时配置两个模型。
+
 ## 文件
 
 ```text
@@ -28,28 +35,51 @@ chapters/06-cost-verification/
 
 ## 最短成功路径
 
-macOS / Linux：
+### macOS / Linux
+
+先完成不需要 Key 的离线部分：
 
 ```bash
+python3 --version
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 cp .env.example .env
 python3 -m unittest discover -s tests -v
 python3 main.py --self-test
-python3 main.py --check-config
 python3 main.py --check-memory
 python3 main.py --check-router
+```
+
+此时应看到 37 项测试全部通过。然后编辑 `.env`，至少填入一把真实 Key，再继续：
+
+```bash
+python3 main.py --check-config
 python3 main.py
 ```
 
-Windows PowerShell 将 `python3` 替换为 `py`，激活命令使用：
+### Windows PowerShell
 
 ```powershell
+py --version
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
+Copy-Item .env.example .env
+py -m unittest discover -s tests -v
+py main.py --self-test
+py main.py --check-memory
+py main.py --check-router
 ```
 
-先运行离线测试，再编辑 `.env` 填入 Key。`--self-test`、单元测试和所有 `--check-*` 都不会发送 API 请求。
+编辑 `.env` 并填入至少一把真实 Key 后：
+
+```powershell
+py main.py --check-config
+py main.py
+```
+
+单元测试、`--self-test`、`--check-memory` 和 `--check-router` 都不会发送 API 请求。`--check-config` 也不联网，但必须先存在至少一把真实 Key 才能通过。
 
 ## 关键命令
 
@@ -61,11 +91,11 @@ Windows PowerShell 将 `python3` 替换为 `py`，激活命令使用：
 - `/route 问题`：只在本地预览任务类型、候选得分、预计成本和验证计划；
 - `/costs`：查看累计 Token、缓存命中率，以及主回答、验证和比较各自的成本；
 - `/compare 问题`：不写入正式记忆，但真实调用会计入成本；
-- `/good`、`/bad`、`/rate 1-5`：继续为最近一次主回答提供质量反馈。
+- `/good`、`/bad`、`/rate 1-5`：为最终展示的最近一次回答提供质量反馈。
 
 ## 成本是怎样算出来的
 
-调用前，程序用一个透明的字符近似法估算输入 Token，并结合任务类型、复杂度、历史平均输出长度和缓存命中率估算输出。它只服务于路由和预算预览，不用于账单。
+调用前，程序用一个透明的字符近似法估算输入 Token，并结合任务类型、复杂度、同类调用的历史平均输出长度和缓存命中率估算输出。主回答、验证和比较的观测会分开记录，临时比较不会再把主回答的预计长度拉偏。
 
 调用后，程序读取 API 响应中的 `usage`。能识别提供方直接返回的缓存命中/未命中字段，也能读取 OpenAI 兼容的 `prompt_tokens_details.cached_tokens`。没有缓存细分时，输入全部按未命中计算，避免低估。
 
@@ -79,7 +109,9 @@ Windows PowerShell 将 `python3` 替换为 `py`，激活命令使用：
 - 任务复杂度很高；
 - 首选与次选模型得分很接近。
 
-之后还必须存在第二个已配置模型，而且预计验证成本不能超过主回答后的剩余单轮预算。验证器默认不因文风不同而重写，只检查明显的逻辑冲突、遗漏约束和回答不完整。
+之后还必须存在另一个可用模型，而且预计验证成本不能超过主回答后的剩余单轮预算。刚刚请求失败的模型不会立刻被再次选为验证器。
+
+验证器默认不因文风不同而重写，只检查明显的逻辑冲突、遗漏约束和回答不完整。若 API 报告验证输出因长度等原因未正常结束，即使文本里出现 `REVISE`，程序也会降级为 `UNCERTAIN`，不会用半段答案覆盖主答案。
 
 ## 两份本地状态
 
@@ -88,14 +120,17 @@ Windows PowerShell 将 `python3` 替换为 `py`，激活命令使用：
 
 `/forget` 只删除正式对话。成本实验若要完全重置，应退出程序后先备份，再删除 `router_state.json`。
 
+若模型回答已经成功，但账本写入失败，程序会显示警告并保留这次回答，**不会把账本错误误判为模型错误，也不会因此自动发起第二次付费请求**。
+
 ## 重要边界
 
 - 本地成本是按当前 `.env` 价格对成功响应的 `usage` 计算，不替代平台账单；
 - 失败请求可能仍被平台计费，但没有 `usage` 时本地无法准确记录；
 - 单轮预算是本地软边界：用于选择和决定是否验证，不能让提供方停止已发出的请求；
 - 验证模型可能与主模型共享盲点；
-- `REVISE` 只有在验证器给出完整替换答案时才会自动替换；
+- `REVISE` 只有在验证器给出完整替换答案且响应正常结束时才会自动替换；
 - `UNCERTAIN` 会保留主答案并附加明确提示；
+- 最终答案若由验证器完整改写，后续评分会记到验证器，而不是错误记到主模型；
 - API Key 只进入本机 `.env`，路由记录不保存提示词正文。
 
 ## 官方资料

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Mapping
 
 from costs import PriceTable, TokenUsage
@@ -25,6 +26,7 @@ class ModelResult:
     answer: str
     usage: TokenUsage
     model: str
+    finish_reason: str | None = None
 
 
 _PROVIDER_TEMPLATES = (
@@ -98,7 +100,7 @@ def _read_unit_float(env: Mapping[str, str], name: str, default: float) -> float
         value = float(raw)
     except ValueError as exc:
         raise RuntimeError(f"{name} 不是有效数字：{raw}") from exc
-    if not 0 <= value <= 1:
+    if not math.isfinite(value) or not 0 <= value <= 1:
         raise RuntimeError(f"{name} 必须位于 0 到 1 之间。")
     return value
 
@@ -109,7 +111,7 @@ def _read_nonnegative_float(env: Mapping[str, str], name: str, default: float) -
         value = float(raw)
     except ValueError as exc:
         raise RuntimeError(f"{name} 不是有效数字：{raw}") from exc
-    if value < 0:
+    if not math.isfinite(value) or value < 0:
         raise RuntimeError(f"{name} 不能小于 0。")
     return value
 
@@ -239,11 +241,15 @@ def request_answer(
     if config.extra_body is not None:
         kwargs["extra_body"] = config.extra_body
     response = client.chat.completions.create(**kwargs)
-    answer = response.choices[0].message.content
+    choice = response.choices[0]
+    answer = choice.message.content
     if not answer:
         raise RuntimeError(f"{config.display_name} 返回了空内容。")
     return ModelResult(
         answer=answer.strip(),
         usage=extract_usage(getattr(response, "usage", None)),
         model=str(getattr(response, "model", config.model) or config.model),
+        finish_reason=(
+            str(getattr(choice, "finish_reason", "") or "").strip().lower() or None
+        ),
     )

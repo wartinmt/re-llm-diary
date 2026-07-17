@@ -31,10 +31,19 @@ def build_verifier_messages(prompt: str, candidate_answer: str) -> list[dict[str
     ]
 
 
-def parse_verification(text: str) -> VerificationOutcome:
+def parse_verification(
+    text: str, finish_reason: str | None = None
+) -> VerificationOutcome:
     clean = text.strip()
     if not clean:
         return VerificationOutcome("uncertain", "验证模型返回空内容。")
+    normalized_finish = (finish_reason or "").strip().lower()
+    complete_reasons = {"", "stop", "end_turn", "completed", "complete"}
+    if normalized_finish not in complete_reasons:
+        return VerificationOutcome(
+            "uncertain",
+            f"验证输出可能未完成（finish_reason={normalized_finish}），没有覆盖主答案。",
+        )
     lines = clean.splitlines()
     first = lines[0].strip().upper()
     if first.startswith("PASS"):
