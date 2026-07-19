@@ -1,0 +1,53 @@
+name: Verify chapter 08
+
+"on":
+  push:
+    paths:
+      - "chapters/08-tool-effects-idempotency/**"
+      - ".github/workflows/verify-chapter-08.yml"
+  pull_request:
+    paths:
+      - "chapters/08-tool-effects-idempotency/**"
+      - ".github/workflows/verify-chapter-08.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  offline-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Syntax check
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python -m py_compile main.py models.py journal.py receipts.py tools.py actions.py
+      - name: Unit tests
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python -m unittest discover -s tests -v
+      - name: Offline self-test
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python main.py --self-test
+      - name: Idempotency demo
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python main.py --demo-idempotency
+      - name: Receipt recovery demo
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python main.py --demo-receipt-recovery
+      - name: Unknown effect demo
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python main.py --demo-unknown
+      - name: Compensation demo
+        working-directory: chapters/08-tool-effects-idempotency
+        run: python main.py --demo-compensation
