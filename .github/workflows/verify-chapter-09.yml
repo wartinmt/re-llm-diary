@@ -1,0 +1,53 @@
+name: Verify chapter 09
+
+"on":
+  push:
+    paths:
+      - "chapters/09-cross-tool-validation-replay/**"
+      - ".github/workflows/verify-chapter-09.yml"
+  pull_request:
+    paths:
+      - "chapters/09-cross-tool-validation-replay/**"
+      - ".github/workflows/verify-chapter-09.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  offline-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Syntax check
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python -m py_compile main.py models.py receipts.py journal.py tools.py validation.py workflow.py
+      - name: Unit tests
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python -m unittest discover -s tests -v
+      - name: Offline self-test
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python main.py --self-test
+      - name: Success demo
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python main.py --demo-success
+      - name: Validation failure demo
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python main.py --demo-validation-failure
+      - name: Resume demo
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python main.py --demo-resume
+      - name: Rollback demo
+        working-directory: chapters/09-cross-tool-validation-replay
+        run: python main.py --demo-rollback
