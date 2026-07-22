@@ -1,0 +1,22 @@
+{
+  "name": "local_note",
+  "version": "1.0.0",
+  "entrypoint": "plugin.py",
+  "display_name": "本地笔记",
+  "risk": "local_write",
+  "description": "在准入后的执行阶段写入一份本地 Markdown 笔记。",
+  "required_inputs": [
+    "title",
+    "directory"
+  ],
+  "capabilities": [
+    "probe",
+    "preview",
+    "execute",
+    "query",
+    "compensate"
+  ],
+  "supports_query": true,
+  "supports_compensation": true,
+  "idempotent": true
+}

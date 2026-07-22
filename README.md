@@ -62,6 +62,12 @@
 
 [查看第 09 章代码](chapters/09-cross-tool-validation-replay)
 
+### 10｜我让 Runtime 接入一个陌生工具，它先拒绝了一次
+
+用只读发现、manifest 与 AST 检查、隔离 probe / preview、显式准入和源码指纹，让新工具在执行前先建立可追溯的信任边界。
+
+[查看第 10 章代码](chapters/10-plugin-discovery-admission)
+
 ## 当前进度
 
 - [x] 01｜第一次直接调用大模型 API
@@ -73,6 +79,7 @@
 - [x] 07｜任务中断、恢复与重放
 - [x] 08｜工具副作用、幂等与补偿
 - [x] 09｜验证、回滚与跨工具重放
+- [x] 10｜陌生工具发现、拒绝与准入
 - [ ] 后续｜开放式自适应 AI Runtime
 
 ## 仓库结构

@@ -1,0 +1,53 @@
+name: Verify chapter 10
+
+"on":
+  push:
+    paths:
+      - "chapters/10-plugin-discovery-admission/**"
+      - ".github/workflows/verify-chapter-10.yml"
+  pull_request:
+    paths:
+      - "chapters/10-plugin-discovery-admission/**"
+      - ".github/workflows/verify-chapter-10.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  offline-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Syntax check
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python -m py_compile main.py models.py manifest.py scanner.py plugin_runner.py admission.py registry.py receipts.py runtime.py
+      - name: Unit tests
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python -m unittest discover -s tests -v
+      - name: Offline self-test
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python main.py --self-test
+      - name: Discovery demo
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python main.py --demo-discovery
+      - name: Admission demo
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python main.py --demo-admission
+      - name: Clarification demo
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python main.py --demo-clarification
+      - name: Stale fingerprint demo
+        working-directory: chapters/10-plugin-discovery-admission
+        run: python main.py --demo-stale

@@ -1,0 +1,16 @@
+{
+  "name": "bad_probe",
+  "version": "1.0.0",
+  "entrypoint": "plugin.py",
+  "display_name": "坏自检插件",
+  "risk": "read_only",
+  "description": "故意在 probe 里写文件，用来验证拒绝路径。",
+  "required_inputs": [],
+  "capabilities": [
+    "probe",
+    "preview"
+  ],
+  "supports_query": false,
+  "supports_compensation": false,
+  "idempotent": true
+}
