@@ -1,9 +1,11 @@
 import unittest
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from main import build_api_messages, compare_providers
+from main import build_api_messages, compare_providers, print_unsaved_answer
 from providers import ProviderConfig
 
 
@@ -66,6 +68,12 @@ class MainLogicTests(unittest.TestCase):
         )
         self.assertIsNotNone(results[0].error)
         self.assertEqual(results[1].answer, "ok")
+
+    def test_paid_answer_remains_visible_when_memory_save_fails(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_unsaved_answer("GLM", "已经返回的回答")
+        self.assertIn("GLM（未保存）：已经返回的回答", output.getvalue())
 
 
 if __name__ == "__main__":

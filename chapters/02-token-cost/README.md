@@ -21,7 +21,8 @@ chapters/02-token-cost/
 ├── .env.example
 ├── README.md
 ├── TROUBLESHOOTING.md
-└── LAB_NOTES.md
+├── LAB_NOTES.md
+└── tests/
 ```
 
 ## 第一次运行前
@@ -33,6 +34,7 @@ chapters/02-token-cost/
 安装依赖后，建议按顺序运行：
 
 ```bash
+python3 -m unittest discover -s tests -v
 python3 main.py --self-test
 python3 main.py --check-config
 python3 main.py
@@ -40,6 +42,7 @@ python3 main.py
 
 Windows PowerShell 将 `python3` 换成 `py`。
 
+- 单元测试：6 项，覆盖非有限价格、负 Token 和 usage 缺字段；
 - `--self-test`：不联网、不需要 API Key、不产生费用；
 - `--check-config`：读取 `.env`，但不发送 API 请求；
 - 正常运行：开始真实对话并产生少量 API 用量。

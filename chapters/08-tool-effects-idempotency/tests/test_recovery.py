@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from actions import ActionCoordinatorError, ConfirmationRequiredError, RetryBlockedError
-from tools import SimulatedProcessCrash
+from tools import SimulatedProcessCrash, ToolError
 from common import TempCoordinatorMixin
 
 
@@ -97,3 +98,18 @@ class RecoveryTests(TempCoordinatorMixin, unittest.TestCase):
                 confirm="CONFIRM",
                 payload={"title": "A", "body": "B"},
             )
+
+    def test_09_recovery_rejects_receipt_when_real_file_is_missing(self):
+        with self.assertRaises(SimulatedProcessCrash):
+            self.coordinator.execute(
+                tool_name="local_note",
+                payload={"title": "A", "body": "B"},
+                idempotency_key="abc:missing-reality",
+                simulate="crash_after_effect",
+            )
+        receipt = self.coordinator.tools["local_note"]._load_service_state()[
+            "abc:missing-reality"
+        ]
+        Path(receipt["effect_ref"]).unlink()
+        with self.assertRaises(ToolError):
+            self.coordinator.recover("abc:missing-reality")

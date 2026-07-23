@@ -16,7 +16,7 @@ python3 -m unittest discover -s tests -v
 python3 main.py --self-test
 ```
 
-结果：13 项单元测试全部通过；离线自检通过。
+结果：14 项单元测试全部通过；离线自检通过。
 
 另外实际执行了两组配置测试：
 
@@ -41,15 +41,12 @@ python3 main.py --self-test
 - 智谱官方 OpenAI 兼容文档说明：OpenAI SDK 版本不低于 1.0.0；通过修改 API Key 和 Base URL 可以使用兼容接口；官方示例模型为 `glm-5.2`，Base URL 为 `https://open.bigmodel.cn/api/paas/v4/`；
 - DeepSeek Create Chat Completion 官方文档：本章沿用 `https://api.deepseek.com` 与 `deepseek-v4-flash`。
 
-## 部署脚本验证
+## 历史发布验证
 
-部署脚本还会在用户本地仓库中重新：
-
-- 在临时隔离环境中安装依赖；
-- 安装固定依赖；
-- 执行语法检查、13 项单元测试与离线自检；
-- 更新首页、路线图、更新记录和参考资料；
-- 提交、推送并创建 `v0.0.4` 标签。
+发布 `v0.0.4` 时曾通过仓库外的临时发布脚本重新安装固定依赖、执行
+语法检查、13 项单元测试与离线自检，并更新文档、提交、推送和创建
+标签。该脚本不属于本章交付内容，因此这段历史记录不能替代读者按上文
+命令进行的当前验证。
 
 ## 未声称完成的部分
 

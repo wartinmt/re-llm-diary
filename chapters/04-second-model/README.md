@@ -25,6 +25,7 @@ chapters/04-second-model/
 macOS / Linux：
 
 ```bash
+python3 -m unittest discover -s tests -v
 python3 main.py --self-test
 python3 main.py --check-config
 python3 main.py --check-memory
@@ -33,6 +34,7 @@ python3 main.py
 
 Windows PowerShell 将 `python3` 替换为 `py`。
 
+- 单元测试：14 项；
 - `--self-test`：离线验证记忆、模型选择和临时比较；
 - `--check-config`：显示已配置模型，但不显示 API Key、不发请求；
 - `--check-memory`：验证本地记忆文件；

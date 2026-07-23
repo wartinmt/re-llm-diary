@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import unittest
+import io
+from contextlib import redirect_stdout
 
-from main import build_api_messages, compare_providers, choose_for_turn, AppSettings
+from main import (
+    AppSettings,
+    build_api_messages,
+    choose_for_turn,
+    compare_providers,
+    print_unsaved_answer,
+)
 from providers import ProviderConfig
 from router import RouterState
 from pathlib import Path
@@ -49,6 +57,12 @@ class MainTests(unittest.TestCase):
         self.assertEqual(provider, "glm")
         self.assertIsNone(decision)
         self.assertEqual(bucket, "general")
+
+    def test_paid_answer_remains_visible_when_memory_save_fails(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_unsaved_answer("DeepSeek", "已经返回的回答")
+        self.assertIn("DeepSeek（未保存）：已经返回的回答", output.getvalue())
 
 
 if __name__ == "__main__":

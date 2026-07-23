@@ -14,7 +14,9 @@ chapters/03-persistent-memory/
 ├── .env.example
 ├── README.md
 ├── TROUBLESHOOTING.md
-└── LAB_NOTES.md
+├── LAB_NOTES.md
+├── VERIFICATION.md
+└── tests/
 ```
 
 运行后会自动创建 `data/conversation.json`。仓库根目录的 `.gitignore` 应忽略 `.env` 和 `data/`。
@@ -24,6 +26,7 @@ chapters/03-persistent-memory/
 macOS / Linux：
 
 ```bash
+python3 -m unittest discover -s tests -v
 python3 main.py --self-test
 python3 main.py --check-config
 python3 main.py --check-memory
@@ -32,6 +35,7 @@ python3 main.py
 
 Windows PowerShell 将 `python3` 替换为 `py`。
 
+- 单元测试：7 项，包括付费回答成功但本地保存失败时仍显示回答；
 - `--self-test`：在临时目录验证保存、恢复、损坏保护和删除；
 - `--check-config`：读取配置但不发送请求；
 - `--check-memory`：验证当前记忆文件；

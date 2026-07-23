@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from admission import run_method
+from admission import require_current_fingerprint, run_method
 from models import ClarificationState, RunReceipt, ScanReport
 from receipts import ReceiptStore, stable_plan_key
 from registry import AdmissionStore
@@ -34,10 +34,16 @@ class PluginRuntime:
         status = self.admission_store.status_for(report)
         if status != "admitted":
             raise RuntimeError(f"插件当前不可执行：{status}")
+        require_current_fingerprint(report)
         missing = [key for key in report.manifest.required_inputs if not values.get(key, "").strip()]
         if missing:
             raise RuntimeError(f"缺少输入：{missing[0]}")
-        plan_key = stable_plan_key(report.manifest.name, values)
+        unexpected = sorted(set(values) - set(report.manifest.required_inputs))
+        if unexpected:
+            raise RuntimeError(f"包含 manifest 未声明的输入：{unexpected[0]}")
+        plan_key = stable_plan_key(
+            report.manifest.name, values, report.fingerprint
+        )
         existing = self.receipt_store.get(plan_key)
         if existing:
             return RunReceipt(existing.receipt_id, existing.plugin_name, existing.plan_key, existing.output, True)

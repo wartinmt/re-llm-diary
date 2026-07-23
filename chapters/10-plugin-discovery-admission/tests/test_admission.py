@@ -23,3 +23,6 @@ class AdmissionTests(TempPluginMixin, unittest.TestCase):
         s=self.store(); r=scan_plugin(ROOT/'plugins/local_note'); evaluate_admission(r,s); self.assertEqual(s.status_for(r),'pending_confirmation')
     def test_12_bad_method_raises(self):
         with self.assertRaises(Exception): run_method(scan_plugin(ROOT/'plugins/safe_lookup'),'execute',self.root)
+    def test_13_probe_does_not_write_bytecode_into_plugin(self):
+        d=self.copy_plugin('safe_lookup'); run_method(scan_plugin(d),'probe',self.root/'workspace')
+        self.assertFalse((d/'__pycache__').exists())

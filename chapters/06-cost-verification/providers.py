@@ -187,7 +187,10 @@ def create_clients(configs: Mapping[str, ProviderConfig]) -> dict[str, Any]:
             api_key=config.api_key,
             base_url=config.base_url,
             timeout=60.0,
-            max_retries=2,
+            # A transport error does not prove that the paid request was not
+            # accepted remotely.  Let the chapter-level state machine decide
+            # whether a new attempt is authorized.
+            max_retries=0,
         )
         for key, config in configs.items()
     }

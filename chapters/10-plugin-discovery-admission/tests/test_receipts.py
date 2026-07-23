@@ -12,8 +12,9 @@ class ReceiptTests(TempPluginMixin, unittest.TestCase):
     def test_05_put_get(self):
         s=self.store(); r=RunReceipt('r','p','k',{'ok':1}); s.put(r); self.assertEqual(s.get('k').receipt_id,'r')
     def test_06_missing_get(self): self.assertIsNone(self.store().get('none'))
-    def test_07_replace(self):
-        s=self.store(); s.put(RunReceipt('a','p','k',{})); s.put(RunReceipt('b','p','k',{})); self.assertEqual(s.get('k').receipt_id,'b')
+    def test_07_conflicting_replace_rejected(self):
+        s=self.store(); s.put(RunReceipt('a','p','k',{}))
+        with self.assertRaises(RuntimeError): s.put(RunReceipt('b','p','k',{}))
     def test_08_parent_created(self):
         s=self.store(); s.put(RunReceipt('a','p','k',{})); self.assertTrue(s.path.exists())
     def test_09_corrupt_rejected(self):
@@ -21,3 +22,5 @@ class ReceiptTests(TempPluginMixin, unittest.TestCase):
         with self.assertRaises(RuntimeError): s.load()
     def test_10_output_roundtrip(self):
         s=self.store(); s.put(RunReceipt('a','p','k',{'path':'x'})); self.assertEqual(s.get('k').output['path'],'x')
+    def test_11_key_changes_with_plugin_fingerprint(self):
+        self.assertNotEqual(stable_plan_key('x',{},'a'),stable_plan_key('x',{},'b'))

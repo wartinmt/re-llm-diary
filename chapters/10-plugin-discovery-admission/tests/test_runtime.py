@@ -32,3 +32,16 @@ class RuntimeTests(TempPluginMixin, unittest.TestCase):
         a,_,rt=self.setup_runtime(); p=scan_plugin(ROOT/'plugins/local_note'); evaluate_admission(p,a,'CONFIRM'); rt.execute(p,{'title':'x','directory':'d'}); rt.execute(p,{'title':'x','directory':'d'}); self.assertEqual(len(list((self.root/'workspace').rglob('*.md'))),1)
     def test_10_read_only_execute_preview(self):
         a,_,rt=self.setup_runtime(); p=scan_plugin(ROOT/'plugins/safe_lookup'); evaluate_admission(p,a); x=rt.execute(p,{'query':'runtime'}); self.assertEqual(x.output['answer'],'运行时协调层')
+    def test_11_old_report_is_rejected_after_source_change(self):
+        d=self.copy_plugin('safe_lookup'); a,_,rt=self.setup_runtime(); p=scan_plugin(d); evaluate_admission(p,a); (d/'plugin.py').write_text((d/'plugin.py').read_text()+'\n# changed',encoding='utf-8')
+        with self.assertRaises(Exception): rt.execute(p,{'query':'runtime'})
+    def test_11b_stale_source_cannot_reuse_old_execution_receipt(self):
+        d=self.copy_plugin('safe_lookup'); a,_,rt=self.setup_runtime(); p=scan_plugin(d); evaluate_admission(p,a); rt.execute(p,{'query':'runtime'}); (d/'plugin.py').write_text((d/'plugin.py').read_text()+'\n# changed',encoding='utf-8')
+        with self.assertRaises(Exception): rt.execute(p,{'query':'runtime'})
+    def test_12_unexpected_input_is_rejected(self):
+        a,_,rt=self.setup_runtime(); p=scan_plugin(ROOT/'plugins/safe_lookup'); evaluate_admission(p,a)
+        with self.assertRaises(RuntimeError): rt.execute(p,{'query':'runtime','ignored':'x'})
+    def test_13_note_cannot_write_outside_workspace(self):
+        a,_,rt=self.setup_runtime(); p=scan_plugin(ROOT/'plugins/local_note'); evaluate_admission(p,a,'CONFIRM')
+        with self.assertRaises(Exception): rt.execute(p,{'title':'x','directory':'../outside'})
+        self.assertFalse((self.root/'outside/x.md').exists())

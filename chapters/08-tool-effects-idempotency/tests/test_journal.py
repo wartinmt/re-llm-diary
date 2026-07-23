@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from journal import ActionJournal, JournalError, JournalFormatError, TrailingFragmentError
 
@@ -78,6 +79,17 @@ class JournalTests(unittest.TestCase):
         backup = self.journal.repair_trailing_fragment()
         self.assertTrue(backup.exists())
         self.assertEqual(self.journal.read_all(), [first])
+
+    def test_10b_failed_repair_replace_preserves_original_bytes(self):
+        self.append()
+        with self.path.open("ab") as handle:
+            handle.write(b'{"seq":2')
+        original = self.path.read_bytes()
+        with patch("journal.os.replace", side_effect=OSError("disk failure")):
+            with self.assertRaises(OSError):
+                self.journal.repair_trailing_fragment()
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.path.parent.glob("*.repair.tmp")), [])
 
     def test_11_repair_clean_file_rejected(self):
         self.append()

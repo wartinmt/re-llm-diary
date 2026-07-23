@@ -31,3 +31,12 @@ class ManifestTests(TempPluginMixin, unittest.TestCase):
     def test_11_query_consistency(self):
         d=json.loads((ROOT/'plugins/safe_lookup/plugin.json').read_text()); d['supports_query']=True; p=self.root/'plugin.json'; p.write_text(json.dumps(d),encoding='utf-8')
         with self.assertRaises(ManifestError): load_manifest(p)
+    def test_12_boolean_strings_are_rejected(self):
+        d=json.loads((ROOT/'plugins/safe_lookup/plugin.json').read_text()); d['idempotent']='false'; p=self.root/'plugin.json'; p.write_text(json.dumps(d),encoding='utf-8')
+        with self.assertRaises(ManifestError): load_manifest(p)
+    def test_13_probe_and_preview_are_required(self):
+        d=json.loads((ROOT/'plugins/safe_lookup/plugin.json').read_text()); d['capabilities']=['probe']; p=self.root/'plugin.json'; p.write_text(json.dumps(d),encoding='utf-8')
+        with self.assertRaises(ManifestError): load_manifest(p)
+    def test_14_side_effect_plugin_must_claim_idempotency(self):
+        d=json.loads((ROOT/'plugins/local_note/plugin.json').read_text()); d['idempotent']=False; p=self.root/'plugin.json'; p.write_text(json.dumps(d),encoding='utf-8')
+        with self.assertRaises(ManifestError): load_manifest(p)

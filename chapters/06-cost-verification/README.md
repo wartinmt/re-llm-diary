@@ -51,7 +51,7 @@ python3 main.py --check-memory
 python3 main.py --check-router
 ```
 
-此时应看到 37 项测试全部通过。然后编辑 `.env`，至少填入一把真实 Key，再继续：
+此时应看到 39 项测试全部通过。然后编辑 `.env`，至少填入一把真实 Key，再继续：
 
 ```bash
 python3 main.py --check-config
@@ -121,6 +121,11 @@ py main.py
 `/forget` 只删除正式对话。成本实验若要完全重置，应退出程序后先备份，再删除 `router_state.json`。
 
 若模型回答已经成功，但账本写入失败，程序会显示警告并保留这次回答，**不会把账本错误误判为模型错误，也不会因此自动发起第二次付费请求**。
+
+SDK 内部重试已关闭。`AUTO_FALLBACK` 默认也是 `false`：网络异常不能证明
+远端没有接受请求，默认自动切换提供方可能重复计费。第 06 章还没有第 07
+章的持久 `remote_unknown` 状态；若为了实验显式启用 fallback，必须接受
+这一风险，且不能把它用于带真实副作用的工具调用。
 
 ## 重要边界
 

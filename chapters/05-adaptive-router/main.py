@@ -181,6 +181,10 @@ def print_help() -> None:
     )
 
 
+def print_unsaved_answer(display_name: str, answer: str) -> None:
+    print(f"\n{display_name}（未保存）：{answer}")
+
+
 def print_models(configs: Mapping[str, ProviderConfig], state: RouterState) -> None:
     print("\n已配置模型：")
     for key, config in configs.items():
@@ -535,6 +539,7 @@ def run_chat() -> None:
         except OSError as exc:
             print(f"\n保存失败：{exc}", file=sys.stderr)
             print("本轮不会进入当前对话记忆。", file=sys.stderr)
+            print_unsaved_answer(config.display_name, answer)
             continue
 
         messages = candidate

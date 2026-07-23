@@ -11,6 +11,7 @@ from actions import (
     UnknownToolError,
 )
 from tools import SimulatedProcessCrash
+from models import ToolReceipt
 from common import TempCoordinatorMixin
 
 
@@ -41,13 +42,18 @@ class ActionCoordinatorTests(TempCoordinatorMixin, unittest.TestCase):
 
     def test_04_duplicate_key_reuses_receipt(self):
         first = self.create()
-        second = self.coordinator.execute(
-            tool_name="local_note",
-            payload={"title": "X", "body": "Y"},
-            idempotency_key="abc:create",
-        )
+        second = self.create()
         self.assertEqual(first.receipt, second.receipt)
         self.assertTrue(second.reused)
+
+    def test_04b_duplicate_key_with_different_payload_is_rejected(self):
+        self.create()
+        with self.assertRaises(RetryBlockedError):
+            self.coordinator.execute(
+                tool_name="local_note",
+                payload={"title": "X", "body": "Y"},
+                idempotency_key="abc:create",
+            )
 
     def test_05_duplicate_does_not_create_second_file(self):
         self.create()
@@ -168,6 +174,21 @@ class ActionCoordinatorTests(TempCoordinatorMixin, unittest.TestCase):
         self.assertEqual(first.receipt, second.receipt)
         self.assertTrue(second.reused)
 
+    def test_17b_compensation_key_cannot_be_reused_for_another_original(self):
+        self.create("abc:original4b-a")
+        self.create("abc:original4b-b")
+        self.coordinator.compensate(
+            original_key="abc:original4b-a",
+            compensation_key="abc:undo4b",
+            confirm="CONFIRM",
+        )
+        with self.assertRaises(RetryBlockedError):
+            self.coordinator.compensate(
+                original_key="abc:original4b-b",
+                compensation_key="abc:undo4b",
+                confirm="CONFIRM",
+            )
+
     def test_18_opaque_compensation_rejected(self):
         result = self.coordinator.execute(
             tool_name="opaque_counter",
@@ -207,3 +228,24 @@ class ActionCoordinatorTests(TempCoordinatorMixin, unittest.TestCase):
         events = self.coordinator.journal.find_by_key("abc:parent-new")
         self.assertEqual(events[0]["parent_action_id"], original.action_id)
         self.assertEqual(retried.status, "completed")
+
+    def test_21_tool_cannot_return_receipt_for_another_key(self):
+        class WrongReceiptTool:
+            queryable = False
+            compensatable = False
+
+            def execute(self, payload, idempotency_key, *, simulate=None):
+                del payload, idempotency_key, simulate
+                return ToolReceipt.create(
+                    tool_name="wrong",
+                    idempotency_key="abc:other-key",
+                    effect_ref="wrong",
+                )
+
+        self.coordinator.tools["wrong"] = WrongReceiptTool()
+        with self.assertRaises(ActionCoordinatorError):
+            self.coordinator.execute(
+                tool_name="wrong",
+                payload={},
+                idempotency_key="abc:planned-key",
+            )

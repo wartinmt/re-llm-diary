@@ -2,7 +2,7 @@
 
 ## 离线
 
-- [ ] `python3 -m unittest discover -s tests -v` 的 37 项测试全部通过；
+- [ ] `python3 -m unittest discover -s tests -v` 的 39 项测试全部通过；
 - [ ] `python3 main.py --self-test` 通过且不联网；
 - [ ] `--check-config` 不显示 API Key；
 - [ ] `--check-memory` 能拒绝损坏存档；
@@ -14,6 +14,7 @@
 - [ ] 临时比较的长输出不会污染主回答的输出长度估算；
 - [ ] 刚刚失败的候选不会立即被再次选作验证器；
 - [ ] 账本写入失败不会把成功回答伪装成模型失败或触发重试。
+- [ ] SDK 内部重试关闭，自动 provider fallback 默认为关闭；
 
 ## 真实 API
 

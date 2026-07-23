@@ -24,6 +24,13 @@ def _expect_strings(payload: dict[str, Any], key: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in value)
 
 
+def _expect_bool(payload: dict[str, Any], key: str) -> bool:
+    value = payload.get(key, False)
+    if not isinstance(value, bool):
+        raise ManifestError(f"manifest 字段 {key!r} 必须是 JSON boolean。")
+    return value
+
+
 def load_manifest(path: Path) -> PluginManifest:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -43,6 +50,13 @@ def load_manifest(path: Path) -> PluginManifest:
     unknown = sorted(set(capabilities) - ALLOWED_CAPABILITIES)
     if unknown:
         raise ManifestError(f"不支持的 capability：{', '.join(unknown)}")
+    required_admission_methods = {"probe", "preview"}
+    missing_admission_methods = sorted(required_admission_methods - set(capabilities))
+    if missing_admission_methods:
+        raise ManifestError(
+            "所有插件都必须声明 admission 所需能力："
+            + ", ".join(missing_admission_methods)
+        )
     required_inputs = _expect_strings(payload, "required_inputs")
     if len(set(required_inputs)) != len(required_inputs):
         raise ManifestError("required_inputs 不能重复。")
@@ -59,9 +73,9 @@ def load_manifest(path: Path) -> PluginManifest:
         description=description,
         required_inputs=required_inputs,
         capabilities=capabilities,
-        supports_query=bool(payload.get("supports_query", False)),
-        supports_compensation=bool(payload.get("supports_compensation", False)),
-        idempotent=bool(payload.get("idempotent", False)),
+        supports_query=_expect_bool(payload, "supports_query"),
+        supports_compensation=_expect_bool(payload, "supports_compensation"),
+        idempotent=_expect_bool(payload, "idempotent"),
     )
     if manifest.supports_query and "query" not in capabilities:
         raise ManifestError("supports_query=true 时 capabilities 必须包含 query。")
@@ -69,4 +83,6 @@ def load_manifest(path: Path) -> PluginManifest:
         raise ManifestError("supports_compensation=true 时 capabilities 必须包含 compensate。")
     if manifest.risk != "read_only" and "execute" not in capabilities:
         raise ManifestError("会产生副作用的工具必须声明 execute。")
+    if manifest.risk != "read_only" and not manifest.idempotent:
+        raise ManifestError("会产生副作用的工具必须明确声明 idempotent=true。")
     return manifest

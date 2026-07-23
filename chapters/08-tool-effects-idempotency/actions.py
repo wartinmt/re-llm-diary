@@ -48,11 +48,25 @@ class ActionCoordinator:
         key = validate_idempotency_key(idempotency_key)
         clean_payload = validate_payload(payload)
         tool = self._tool(tool_name)
+        existing_events = self.journal.find_by_key(key)
+        if existing_events:
+            self._require_same_request(existing_events, tool_name, clean_payload)
 
         existing_receipt = self.receipts.get(key)
         if existing_receipt is not None:
-            events = self.journal.find_by_key(key)
-            action_id = events[0]["action_id"] if events else new_action_id()
+            if not existing_events:
+                raise RetryBlockedError(
+                    "a receipt exists without its original action plan; request binding cannot be proven"
+                )
+            if (
+                existing_receipt.tool_name != tool_name
+                or existing_receipt.idempotency_key != key
+                or existing_receipt.outcome != "applied"
+            ):
+                raise RetryBlockedError(
+                    "the existing receipt does not match this planned tool action"
+                )
+            action_id = existing_events[0]["action_id"]
             self.journal.append(
                 action_id=action_id,
                 idempotency_key=key,
@@ -70,7 +84,6 @@ class ActionCoordinator:
                 message="existing durable receipt reused; tool was not called again",
             )
 
-        existing_events = self.journal.find_by_key(key)
         if existing_events and existing_events[-1]["event_type"] == "effect_unknown":
             raise RetryBlockedError(
                 "the previous effect is unknown; do not retry with the same key or silently create another action"
@@ -153,6 +166,15 @@ class ActionCoordinator:
 
         receipt = self.receipts.get(key)
         if receipt is not None:
+            self._require_receipt_binding(
+                receipt, tool_name=tool_name, key=key, outcome="applied"
+            )
+            if getattr(tool, "queryable", False):
+                tool_receipt = tool.lookup(key)
+                if tool_receipt != receipt:
+                    raise ActionCoordinatorError(
+                        "runtime receipt does not match the queryable tool receipt"
+                    )
             self.journal.append(
                 action_id=action_id,
                 idempotency_key=key,
@@ -205,6 +227,9 @@ class ActionCoordinator:
                 receipt=None,
                 message="queryable tool reports no effect for this key",
             )
+        self._require_receipt_binding(
+            remote_receipt, tool_name=tool_name, key=key, outcome="applied"
+        )
         return self._commit_receipt(
             action_id=action_id,
             tool_name=tool_name,
@@ -262,8 +287,22 @@ class ActionCoordinator:
         original_events = self.journal.find_by_key(original)
         parent_action_id = original_events[0]["action_id"] if original_events else None
         if existing is not None:
+            events = self.journal.find_by_key(compensation)
+            if (
+                existing.tool_name != original_receipt.tool_name
+                or existing.outcome != "compensated"
+                or existing.metadata.get("compensates_receipt_id")
+                != original_receipt.receipt_id
+                or not events
+                or events[0]["event_type"] != "compensation_planned"
+                or events[0]["payload"].get("original_receipt_id")
+                != original_receipt.receipt_id
+            ):
+                raise RetryBlockedError(
+                    "the compensation key is already bound to a different effect"
+                )
             return ActionResult(
-                action_id=self.journal.find_by_key(compensation)[0]["action_id"],
+                action_id=events[0]["action_id"],
                 idempotency_key=compensation,
                 status="compensated",
                 receipt=existing,
@@ -281,6 +320,19 @@ class ActionCoordinator:
             parent_action_id=parent_action_id,
         )
         receipt = tool.compensate(original_receipt, compensation)
+        self._require_receipt_binding(
+            receipt,
+            tool_name=original_receipt.tool_name,
+            key=compensation,
+            outcome="compensated",
+        )
+        if (
+            receipt.metadata.get("compensates_receipt_id")
+            != original_receipt.receipt_id
+        ):
+            raise ActionCoordinatorError(
+                "tool returned a compensation receipt for a different original effect"
+            )
         self.receipts.put(receipt)
         self.journal.append(
             action_id=action_id,
@@ -311,6 +363,42 @@ class ActionCoordinator:
     def summaries(self) -> list[dict[str, Any]]:
         return self.journal.action_summaries()
 
+    @staticmethod
+    def _require_same_request(
+        events: list[dict[str, Any]],
+        tool_name: str,
+        payload: Mapping[str, Any],
+    ) -> None:
+        planned = next(
+            (event for event in events if event["event_type"] == "action_planned"),
+            None,
+        )
+        if (
+            planned is None
+            or planned["tool_name"] != tool_name
+            or planned["payload"].get("request") != dict(payload)
+        ):
+            raise RetryBlockedError(
+                "the idempotency key is already bound to a different tool or payload"
+            )
+
+    @staticmethod
+    def _require_receipt_binding(
+        receipt: ToolReceipt,
+        *,
+        tool_name: str,
+        key: str,
+        outcome: str,
+    ) -> None:
+        if (
+            receipt.tool_name != tool_name
+            or receipt.idempotency_key != key
+            or receipt.outcome != outcome
+        ):
+            raise ActionCoordinatorError(
+                "tool receipt does not match the planned tool, key, or outcome"
+            )
+
     def _commit_receipt(
         self,
         *,
@@ -321,6 +409,9 @@ class ActionCoordinator:
         parent_action_id: str | None,
         reconciled: bool,
     ) -> ActionResult:
+        self._require_receipt_binding(
+            receipt, tool_name=tool_name, key=key, outcome="applied"
+        )
         self.receipts.put(receipt)
         self.journal.append(
             action_id=action_id,

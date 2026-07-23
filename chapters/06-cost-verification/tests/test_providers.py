@@ -1,7 +1,8 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from providers import extract_usage, load_provider_configs
+from providers import create_clients, extract_usage, load_provider_configs
 
 
 class ProviderTests(unittest.TestCase):
@@ -35,6 +36,12 @@ class ProviderTests(unittest.TestCase):
         raw = SimpleNamespace(prompt_tokens=50, completion_tokens=5)
         usage = extract_usage(raw)
         self.assertEqual(usage.cache_miss_tokens, 50)
+
+    def test_client_disables_sdk_retries_for_unknown_remote_results(self):
+        configs = load_provider_configs({"DEEPSEEK_API_KEY": "test-only"})
+        with patch("openai.OpenAI") as constructor:
+            create_clients(configs)
+        self.assertEqual(constructor.call_args.kwargs["max_retries"], 0)
 
 
 if __name__ == '__main__':

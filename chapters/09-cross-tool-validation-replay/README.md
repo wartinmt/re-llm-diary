@@ -55,7 +55,7 @@ py -m unittest discover -s tests -v
 py main.py --self-test
 ```
 
-预期看到 58 项测试通过。全部命令离线运行。
+预期看到 67 项测试通过。全部命令离线运行。
 
 ## 四个独立演示
 

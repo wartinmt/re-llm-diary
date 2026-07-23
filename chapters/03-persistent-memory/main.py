@@ -73,6 +73,10 @@ def print_help() -> None:
     )
 
 
+def print_unsaved_answer(display_name: str, answer: str) -> None:
+    print(f"\n{display_name}（未保存）：{answer}")
+
+
 def run_self_test() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "conversation.json"
@@ -179,6 +183,7 @@ def run_chat() -> None:
         except OSError as exc:
             print(f"\n保存失败：{exc}", file=sys.stderr)
             print("本轮不会进入当前记忆，请先解决磁盘或权限问题。", file=sys.stderr)
+            print_unsaved_answer("DeepSeek", answer)
             continue
         messages = candidate
         print(f"\nDeepSeek：{answer}")

@@ -2,6 +2,10 @@
 .venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 .DS_Store
 
 # 章节运行时本地数据

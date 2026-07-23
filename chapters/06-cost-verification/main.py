@@ -142,7 +142,7 @@ def load_settings(require_provider: bool = True) -> AppSettings:
         initial_mode=initial_mode,
         initial_policy=policy,
         verify_mode=verify_mode,
-        auto_fallback=_read_bool("AUTO_FALLBACK", True),
+        auto_fallback=_read_bool("AUTO_FALLBACK", False),
         turn_budget_cny=_read_positive_float("TURN_BUDGET_CNY", 0.05),
     )
 

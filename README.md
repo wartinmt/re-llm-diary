@@ -100,6 +100,7 @@ re-llm-diary/
 - [常见问题](docs/faq.md)
 - [参考资料](docs/references.md)
 - [更新记录](docs/changelog.md)
+- [第一季完整审计报告](docs/season-1-audit.md)
 
 ## API Key 安全
 

@@ -38,15 +38,39 @@ def _call_name(node: ast.Call) -> str:
 
 
 def scan_plugin(plugin_dir: Path) -> ScanReport:
+    if plugin_dir.is_symlink():
+        return ScanReport(
+            str(plugin_dir), None, None, False, ("插件目录不能是符号链接。",)
+        )
     manifest_path = plugin_dir / "plugin.json"
+    if manifest_path.is_symlink():
+        return ScanReport(
+            str(plugin_dir), None, None, False, ("manifest 不能是符号链接。",)
+        )
     try:
         manifest = load_manifest(manifest_path)
     except ManifestError as exc:
         return ScanReport(str(plugin_dir), None, None, False, (str(exc),))
     source_path = plugin_dir / manifest.entrypoint
+    if source_path.is_symlink():
+        return ScanReport(
+            str(plugin_dir),
+            manifest,
+            None,
+            False,
+            ("入口源码不能是符号链接。",),
+        )
     if not source_path.is_file():
         return ScanReport(str(plugin_dir), manifest, None, False, (f"入口文件不存在：{source_path.name}",))
     try:
+        if source_path.resolve().parent != plugin_dir.resolve():
+            return ScanReport(
+                str(plugin_dir),
+                manifest,
+                None,
+                False,
+                ("入口源码越过插件目录。",),
+            )
         source = source_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(source_path))
     except (OSError, UnicodeError, SyntaxError) as exc:
