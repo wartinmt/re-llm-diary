@@ -32,6 +32,7 @@ class ToolTests(unittest.TestCase):
     def test_02_note_content(self):
         receipt = self.note.execute({"title": "A", "body": "B"}, "abc:content")
         self.assertEqual(Path(receipt.effect_ref).read_text(encoding="utf-8"), "A\n\nB\n")
+        self.assertEqual(Path(receipt.effect_ref).read_bytes(), b"A\n\nB\n")
 
     def test_03_note_same_key_reuses_service_receipt(self):
         first = self.note.execute({"title": "A", "body": "B"}, "abc:same")

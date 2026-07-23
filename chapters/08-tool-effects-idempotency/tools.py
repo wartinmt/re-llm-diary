@@ -164,7 +164,8 @@ class LocalNoteTool:
             return receipt
 
         content = f"{clean_title}\n\n{clean_body}\n"
-        note_path.write_text(content, encoding="utf-8")
+        with note_path.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
         receipt = ToolReceipt.create(
             tool_name=self.name,
             idempotency_key=key,
