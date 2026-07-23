@@ -10,8 +10,21 @@ from typing import Any
 from models import RunReceipt
 
 
-def stable_plan_key(plugin_name: str, values: dict[str, str]) -> str:
-    payload = json.dumps({"plugin": plugin_name, "values": values}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def stable_plan_key(
+    plugin_name: str,
+    values: dict[str, str],
+    plugin_fingerprint: str | None = None,
+) -> str:
+    payload = json.dumps(
+        {
+            "plugin": plugin_name,
+            "plugin_fingerprint": plugin_fingerprint,
+            "values": values,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -45,4 +58,11 @@ class ReceiptStore:
         return self.load().get(plan_key)
 
     def put(self, receipt: RunReceipt) -> None:
-        receipts = self.load(); receipts[receipt.plan_key] = receipt; self.save(receipts)
+        receipts = self.load()
+        existing = receipts.get(receipt.plan_key)
+        if existing is not None:
+            if existing == receipt:
+                return
+            raise RuntimeError("同一计划键已经绑定到不同执行回执。")
+        receipts[receipt.plan_key] = receipt
+        self.save(receipts)

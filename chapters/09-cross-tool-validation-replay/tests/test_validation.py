@@ -1,5 +1,6 @@
 from validation import validate_document, validate_index
 from common import RuntimeCase
+from dataclasses import replace
 
 class ValidationTests(RuntimeCase):
     def test_41_missing_document(self): self.assertFalse(validate_document(self.runtime.documents_root,self.plan()).ok)
@@ -16,3 +17,8 @@ class ValidationTests(RuntimeCase):
         p=self.plan(); self.runtime.document_tool.write(p.steps[0].idempotency_key,p.document_path,p.content); self.runtime.index_tool.register(p.steps[1].idempotency_key,p.title,"wrong",p.content_sha256); self.assertFalse(validate_index(self.runtime.index_tool,self.runtime.documents_root,p).ok)
     def test_48_disk_changes_after_index(self):
         p=self.plan(); self.runtime.document_tool.write(p.steps[0].idempotency_key,p.document_path,p.content); self.runtime.index_tool.register(p.steps[1].idempotency_key,p.title,p.document_path,p.content_sha256); (self.runtime.documents_root/p.document_path).write_text("changed",encoding="utf-8"); self.assertFalse(validate_index(self.runtime.index_tool,self.runtime.documents_root,p).ok)
+    def test_48b_validation_rejects_path_outside_root(self):
+        outside=self.root/"outside.md"; outside.write_text("secret",encoding="utf-8")
+        p=replace(self.plan(),document_path="../outside.md")
+        self.assertFalse(validate_document(self.runtime.documents_root,p).ok)
+        self.assertFalse(validate_index(self.runtime.index_tool,self.runtime.documents_root,p).ok)

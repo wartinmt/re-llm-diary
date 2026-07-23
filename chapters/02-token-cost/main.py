@@ -98,6 +98,8 @@ def read_decimal_env(name: str, default: str) -> Decimal:
         value = Decimal(raw)
     except InvalidOperation as exc:
         raise RuntimeError(f"{name} 不是有效数字：{raw}") from exc
+    if not value.is_finite():
+        raise RuntimeError(f"{name} 必须是有限数字。")
     if value < 0:
         raise RuntimeError(f"{name} 不能小于 0。")
     return value
@@ -210,11 +212,21 @@ def normalize_usage(usage: object | None) -> UsageSnapshot:
     if usage is None:
         raise RuntimeError("API 没有返回 usage，无法统计 Token。")
 
-    prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
-    completion = int(getattr(usage, "completion_tokens", 0) or 0)
-    total = int(getattr(usage, "total_tokens", prompt + completion) or 0)
-    hit = int(getattr(usage, "prompt_cache_hit_tokens", 0) or 0)
-    miss = int(getattr(usage, "prompt_cache_miss_tokens", 0) or 0)
+    def nonnegative_int(name: str, default: int = 0) -> int:
+        raw = getattr(usage, name, default)
+        try:
+            value = int(raw or 0)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise RuntimeError(f"usage.{name} 不是有效整数。") from exc
+        if value < 0:
+            raise RuntimeError(f"usage.{name} 不能小于 0。")
+        return value
+
+    prompt = nonnegative_int("prompt_tokens")
+    completion = nonnegative_int("completion_tokens")
+    total = nonnegative_int("total_tokens", prompt + completion)
+    hit = nonnegative_int("prompt_cache_hit_tokens")
+    miss = nonnegative_int("prompt_cache_miss_tokens")
 
     # 如果 SDK 没有暴露完整缓存拆分，把无法解释的输入保守地视为未命中。
     explained = hit + miss
@@ -226,7 +238,7 @@ def normalize_usage(usage: object | None) -> UsageSnapshot:
         if hit + miss > prompt:
             hit = max(0, prompt - miss)
 
-    if total <= 0:
+    if total < prompt + completion:
         total = prompt + completion
 
     return UsageSnapshot(

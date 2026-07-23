@@ -32,12 +32,21 @@ class ToolTests(unittest.TestCase):
     def test_02_note_content(self):
         receipt = self.note.execute({"title": "A", "body": "B"}, "abc:content")
         self.assertEqual(Path(receipt.effect_ref).read_text(encoding="utf-8"), "A\n\nB\n")
+        self.assertEqual(Path(receipt.effect_ref).read_bytes(), b"A\n\nB\n")
 
     def test_03_note_same_key_reuses_service_receipt(self):
         first = self.note.execute({"title": "A", "body": "B"}, "abc:same")
-        second = self.note.execute({"title": "X", "body": "Y"}, "abc:same")
+        second = self.note.execute({"title": "A", "body": "B"}, "abc:same")
         self.assertEqual(first, second)
         self.assertEqual(len(list(self.note.notes_dir.glob("*.txt"))), 1)
+
+    def test_03b_note_same_key_rejects_different_payload(self):
+        self.note.execute({"title": "A", "body": "B"}, "abc:same-different")
+        with self.assertRaises(ToolInputError):
+            self.note.execute(
+                {"title": "X", "body": "Y"},
+                "abc:same-different",
+            )
 
     def test_04_note_lookup(self):
         receipt = self.note.execute({"title": "A", "body": "B"}, "abc:lookup")
@@ -84,11 +93,47 @@ class ToolTests(unittest.TestCase):
         with self.assertRaises(CompensationError):
             self.note.compensate(foreign, "abc:foreign-undo")
 
+    def test_11b_compensation_rejects_receipt_outside_tool_root(self):
+        from dataclasses import replace
+
+        original = self.note.execute(
+            {"title": "A", "body": "B"},
+            "abc:outside-original",
+        )
+        outside = self.root / "valuable.txt"
+        outside.write_text("keep", encoding="utf-8")
+        tampered = replace(original, effect_ref=str(outside))
+        with self.assertRaises(CompensationError):
+            self.note.compensate(tampered, "abc:outside-undo")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep")
+
+    def test_11c_note_directory_symlink_is_rejected(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        self.note.root.mkdir(parents=True)
+        try:
+            self.note.notes_dir.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        with self.assertRaises(ToolError):
+            self.note.execute({"title": "A", "body": "B"}, "abc:symlink")
+
     def test_12_corrupt_service_state_rejected(self):
         self.note.service_state_path.parent.mkdir(parents=True, exist_ok=True)
         self.note.service_state_path.write_text("{", encoding="utf-8")
         with self.assertRaises(ToolError):
             self.note.lookup("abc:corrupt")
+
+    def test_12b_service_state_symlink_is_rejected(self):
+        outside = self.root / "outside-state.json"
+        outside.write_text("{}", encoding="utf-8")
+        self.note.root.mkdir(parents=True)
+        try:
+            self.note.service_state_path.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        with self.assertRaises(ToolError):
+            self.note.lookup("abc:linked-state")
 
     def test_13_opaque_increments(self):
         receipt = self.opaque.execute({"amount": 2}, "abc:opaque")
@@ -108,3 +153,15 @@ class ToolTests(unittest.TestCase):
     def test_16_opaque_lookup_unsupported(self):
         with self.assertRaises(ToolError):
             self.opaque.lookup("abc:opaque")
+
+    def test_17_opaque_counter_symlink_is_rejected(self):
+        outside = self.root / "outside-counter.txt"
+        outside.write_text("7\n", encoding="utf-8")
+        self.opaque.root.mkdir(parents=True)
+        try:
+            self.opaque.counter_path.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are unavailable")
+        with self.assertRaises(ToolError):
+            self.opaque.execute({"amount": 1}, "abc:linked-counter")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "7\n")

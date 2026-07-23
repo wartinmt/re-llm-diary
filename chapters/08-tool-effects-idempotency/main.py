@@ -43,7 +43,7 @@ def run_self_test() -> None:
         )
         second = coordinator.execute(
             tool_name="local_note",
-            payload={"title": "被忽略", "body": "不会再次写文件。"},
+            payload={"title": "第一次", "body": "同一动作只应发生一次。"},
             idempotency_key="demo:self-test:one",
         )
         assert first.receipt == second.receipt and second.reused
@@ -97,7 +97,7 @@ def run_demo_idempotency() -> None:
         )
         second = coordinator.execute(
             tool_name="local_note",
-            payload={"title": "不会覆盖", "body": "第二次复用回执。"},
+            payload={"title": "只写一次", "body": "第一次调用创建文件。"},
             idempotency_key=key,
         )
         note_count = len(list((Path(tmp) / "tool_state" / "notes").glob("*.txt")))

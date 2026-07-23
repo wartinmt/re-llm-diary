@@ -84,6 +84,35 @@ class RouterTests(unittest.TestCase):
         with self.assertRaises(Exception):
             rate_pending(RouterState(), 5)
 
+    def test_nonfinite_runtime_latency_is_rejected(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), self.assertRaises(Exception):
+                record_result(RouterState(), "deepseek", "general", True, value)
+
+    def test_nonfinite_saved_latency_is_rejected(self):
+        payload = {
+            "schema_version": 1,
+            "mode": "auto",
+            "policy": "balanced",
+            "manual_provider": "",
+            "providers": {
+                "deepseek": {
+                    "overall": {
+                        "attempts": 1,
+                        "successes": 1,
+                        "total_latency_seconds": float("nan"),
+                        "ratings_count": 0,
+                        "ratings_sum": 0,
+                    },
+                    "buckets": {},
+                }
+            },
+            "last_decision": None,
+            "pending_rating": None,
+        }
+        with self.assertRaises(RouterFormatError):
+            RouterState.from_dict(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

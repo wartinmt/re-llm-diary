@@ -58,8 +58,8 @@ class MetricStats:
     ratings_sum: int = 0
 
     def record_result(self, success: bool, latency_seconds: float) -> None:
-        if latency_seconds < 0:
-            raise RouterError("响应时间不能小于 0。")
+        if not math.isfinite(latency_seconds) or latency_seconds < 0:
+            raise RouterError("响应时间必须是大于等于 0 的有限数字。")
         self.attempts += 1
         if success:
             self.successes += 1
@@ -120,8 +120,11 @@ class MetricStats:
             raise RouterFormatError("统计数字不能小于 0。")
         if stats.successes > stats.attempts:
             raise RouterFormatError("成功次数不能大于尝试次数。")
-        if stats.total_latency_seconds < 0:
-            raise RouterFormatError("累计响应时间不能小于 0。")
+        if (
+            not math.isfinite(stats.total_latency_seconds)
+            or stats.total_latency_seconds < 0
+        ):
+            raise RouterFormatError("累计响应时间必须是大于等于 0 的有限数字。")
         if stats.ratings_sum > stats.ratings_count * 5:
             raise RouterFormatError("评分总和超出范围。")
         return stats

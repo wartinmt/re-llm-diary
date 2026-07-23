@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from main import (
     _answer_provider_after_verification,
     _call_and_record,
     _read_positive_float,
+    load_settings,
 )
 from metrics import MetricsFormatError, RoutingMetricsStore, RoutingSnapshot
 from providers import ModelResult, ProviderConfig, load_provider_configs
@@ -37,6 +39,11 @@ class _FailingMetrics:
 
 
 class SafetyTests(unittest.TestCase):
+    def test_automatic_provider_fallback_is_opt_in(self):
+        with patch("main.load_dotenv"), patch.dict(os.environ, {}, clear=True):
+            settings = load_settings(require_provider=False)
+        self.assertFalse(settings.auto_fallback)
+
     def test_corrupt_counter_is_cleanly_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"

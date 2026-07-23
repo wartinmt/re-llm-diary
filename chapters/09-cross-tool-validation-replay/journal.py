@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,7 @@ class EventJournal:
         with self.path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(body, ensure_ascii=False, sort_keys=True) + "\n")
             handle.flush()
+            os.fsync(handle.fileno())
         return body
 
     def for_workflow(self, workflow_id: str) -> list[dict[str, Any]]:

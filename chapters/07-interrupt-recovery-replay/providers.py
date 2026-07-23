@@ -187,7 +187,10 @@ def create_clients(configs: Mapping[str, ProviderConfig]) -> dict[str, Any]:
             api_key=config.api_key,
             base_url=config.base_url,
             timeout=60.0,
-            max_retries=2,
+            # One journal attempt must correspond to at most one SDK request.
+            # If the response is lost, recovery records remote_unknown instead
+            # of silently issuing another paid request.
+            max_retries=0,
         )
         for key, config in configs.items()
     }

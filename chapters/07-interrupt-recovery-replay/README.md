@@ -63,7 +63,7 @@ py main.py --demo-recovery
 py main.py --check-journal
 ```
 
-预期看到 50 项测试通过。上述命令不会联网，也不会调用模型。之后再填写 `.env` 中的真实 Key，并运行 `python3 main.py --check-config` 和 `python3 main.py`。
+预期看到 51 项测试通过。上述命令不会联网，也不会调用模型。之后再填写 `.env` 中的真实 Key，并运行 `python3 main.py --check-config` 和 `python3 main.py`。
 
 ## 流水账记录什么
 
@@ -108,6 +108,7 @@ py main.py --check-journal
 ## 安全边界
 
 - 在 `request_sent` 事件成功落盘前，不发送 API 请求；
+- SDK 内部自动重试关闭，一个 journal attempt 最多发起一次 SDK 请求；
 - 主请求结果未知时，不自动 fallback；
 - 已落盘的完整回答恢复时不再次调用模型；
 - 只有末尾未完成 JSON 片段允许 `--repair-journal` 截断，且先保留备份；

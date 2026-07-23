@@ -21,3 +21,13 @@ class ScannerTests(TempPluginMixin, unittest.TestCase):
         d=self.copy_plugin('safe_lookup'); (d/'plugin.py').write_text('x=1\n',encoding='utf-8'); self.assertFalse(scan_plugin(d).accepted_static)
     def test_11_discover_four(self): self.assertEqual(len(discover_plugins(ROOT/'plugins')),4)
     def test_12_discover_missing_root(self): self.assertEqual(discover_plugins(self.root/'none'),[])
+    def test_13_symlink_entrypoint_rejected(self):
+        d=self.copy_plugin('safe_lookup'); source=d/'plugin.py'; outside=self.root/'outside.py'; outside.write_text(source.read_text(),encoding='utf-8'); source.unlink()
+        try: source.symlink_to(outside)
+        except (OSError,NotImplementedError): self.skipTest('symbolic links unavailable')
+        self.assertFalse(scan_plugin(d).accepted_static)
+    def test_14_symlink_plugin_directory_rejected(self):
+        target=self.copy_plugin('safe_lookup'); link=self.root/'linked'
+        try: link.symlink_to(target,target_is_directory=True)
+        except (OSError,NotImplementedError): self.skipTest('symbolic links unavailable')
+        self.assertFalse(scan_plugin(link).accepted_static)

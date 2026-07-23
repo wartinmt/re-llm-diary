@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -10,24 +11,58 @@ from typing import Any
 
 from models import AdmissionError, ScanReport
 from registry import AdmissionStore
+from scanner import fingerprint_files
 
 
 def snapshot(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
-        if path.is_file():
-            result[str(path.relative_to(root))] = str(path.stat().st_size)
+        relative = str(path.relative_to(root))
+        if path.is_symlink():
+            result[relative] = f"symlink:{os.readlink(path)}"
+        elif path.is_dir():
+            result[relative + "/"] = "directory"
+        elif path.is_file():
+            result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     return result
 
 
-def run_method(report: ScanReport, method: str, workspace: Path, payload: dict[str, Any] | None = None, timeout: float = 5.0) -> dict[str, Any]:
+def require_current_fingerprint(report: ScanReport) -> None:
     if not report.manifest:
         raise AdmissionError("缺少有效 manifest。")
-    source = Path(report.plugin_dir) / report.manifest.entrypoint
+    plugin_dir = Path(report.plugin_dir)
+    manifest_path = plugin_dir / "plugin.json"
+    source = plugin_dir / report.manifest.entrypoint
+    if (
+        not report.fingerprint
+        or plugin_dir.is_symlink()
+        or manifest_path.is_symlink()
+        or source.is_symlink()
+    ):
+        raise AdmissionError("插件路径或扫描指纹无效，请重新发现和检查。")
+    try:
+        current_fingerprint = fingerprint_files(manifest_path, source)
+    except OSError as exc:
+        raise AdmissionError("无法在执行前重新计算插件指纹。") from exc
+    if current_fingerprint != report.fingerprint:
+        raise AdmissionError("manifest 或入口源码已变化，请重新检查和准入。")
+
+
+def run_method(report: ScanReport, method: str, workspace: Path, payload: dict[str, Any] | None = None, timeout: float = 5.0) -> dict[str, Any]:
+    require_current_fingerprint(report)
+    assert report.manifest is not None
+    plugin_dir = Path(report.plugin_dir)
+    source = plugin_dir / report.manifest.entrypoint
     runner = Path(__file__).resolve().parent / "plugin_runner.py"
-    allowed_env = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LANG", "LC_ALL"}
+    workspace.mkdir(parents=True, exist_ok=True)
+    allowed_env = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "LANG", "LC_ALL"}
     env = {key: value for key, value in os.environ.items() if key.upper() in allowed_env}
     env["PYTHONUTF8"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["HOME"] = str(workspace)
+    env["USERPROFILE"] = str(workspace)
+    env["TMP"] = str(workspace)
+    env["TEMP"] = str(workspace)
     proc = subprocess.run(
         [sys.executable, str(runner), "--source", str(source), "--method", method, "--workspace", str(workspace), "--payload", json.dumps(payload or {}, ensure_ascii=False)],
         capture_output=True,
@@ -35,6 +70,7 @@ def run_method(report: ScanReport, method: str, workspace: Path, payload: dict[s
         encoding="utf-8",
         timeout=timeout,
         env=env,
+        cwd=workspace,
         check=False,
     )
     if proc.returncode != 0:

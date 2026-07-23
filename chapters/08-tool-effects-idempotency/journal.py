@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -170,6 +171,18 @@ class ActionJournal:
             backup = self.path.with_suffix(self.path.suffix + f".partial.{counter}.bak")
             counter += 1
         shutil.copy2(self.path, backup)
-        self.path.write_bytes(complete)
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", suffix=".repair.tmp", dir=self.path.parent
+        )
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(complete)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.path)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
         self.read_all()
         return backup
